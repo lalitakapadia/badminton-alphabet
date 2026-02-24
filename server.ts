@@ -25,7 +25,7 @@ async function startServer() {
     const provider = req.query.provider as string || 'google';
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
-    const redirectUri = `${appUrl}/auth/callback`;
+    const redirectUri = `${appUrl}/`;
 
     if (!supabaseUrl) {
       return res.status(500).json({ error: "Supabase URL not configured" });

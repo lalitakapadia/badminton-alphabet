@@ -40,6 +40,13 @@ export default function App() {
   const [filterStage, setFilterStage] = useState<number | 'all'>('all');
 
   useEffect(() => {
+    // Handle OAuth popup callback if we are in a popup and have a session hash
+    if (window.opener && (window.location.hash.includes('access_token') || window.location.search.includes('code='))) {
+      window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+      window.close();
+      return;
+    }
+
     // Check for invitation token in URL
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -125,6 +132,12 @@ export default function App() {
         setUser(userData);
         localStorage.setItem('badminton_user', JSON.stringify(userData));
         setView('dashboard');
+        
+        // Clean up URL if we are on callback path
+        if (window.location.pathname === '/auth/callback') {
+          window.history.replaceState({}, document.title, '/');
+        }
+
         // Clear invitation from URL
         if (window.location.search.includes('token=')) {
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -218,7 +231,7 @@ export default function App() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/`,
           data: {
             full_name: name,
             role
@@ -267,7 +280,7 @@ export default function App() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: `${window.location.origin}/`,
         }
       });
       if (error) throw error;
