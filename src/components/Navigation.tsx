@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Trophy, User as UserIcon, LogOut, Menu, X, Award } from 'lucide-react';
+import { Trophy, User as UserIcon, LogOut, Menu, X, Award, Shield } from 'lucide-react';
 import { Button } from './Button';
 import { User } from '../types';
 
@@ -41,6 +41,14 @@ export const Navigation = ({
             >
               Program Info
             </button>
+            {user?.role === 'admin' && (
+              <button 
+                onClick={() => setView('admin')}
+                className={`hidden md:flex items-center gap-1.5 text-sm font-bold transition-colors uppercase tracking-widest ${view === 'admin' ? 'text-emerald-600' : 'text-slate-500 hover:text-emerald-600'}`}
+              >
+                Admin Panel
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -84,6 +92,18 @@ export const Navigation = ({
                 <Award size={20} />
                 Program Info
               </button>
+              {user?.role === 'admin' && (
+                <button 
+                  onClick={() => {
+                    setView('admin');
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 p-3 text-slate-600 font-medium hover:bg-slate-50 rounded-xl transition-colors"
+                >
+                  <Shield size={20} />
+                  Admin Panel
+                </button>
+              )}
               <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                 <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center">
                   <UserIcon size={20} />

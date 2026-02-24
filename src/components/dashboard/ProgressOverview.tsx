@@ -1,9 +1,12 @@
-import React from 'react';
-import { motion } from 'motion/react';
-import { Award, Trophy, LayoutDashboard, Users } from 'lucide-react';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Award, Trophy, LayoutDashboard, Users, ClipboardCheck } from 'lucide-react';
 import { Stage, Skill, Progress, User } from '../../types';
 import { Card } from '../Card';
 import { SkillCard } from './SkillCard';
+import { BenchmarkSheet } from './BenchmarkSheet';
+import { STAGE_BENCHMARKS } from '../../constants/benchmarks';
+import { Button } from '../Button';
 
 interface ProgressOverviewProps {
   currentStage: Stage | null;
@@ -24,6 +27,8 @@ export const ProgressOverview = ({
   selectedUser,
   onUpdateProgress
 }: ProgressOverviewProps) => {
+  const [showBenchmark, setShowBenchmark] = useState(false);
+
   if (!currentStage) {
     return (
       <div className="h-64 flex flex-col items-center justify-center text-slate-400 space-y-4">
@@ -52,10 +57,17 @@ export const ProgressOverview = ({
               <h3 className="text-3xl font-bold tracking-tight">{currentStage.name}</h3>
               <p className="text-emerald-50 opacity-90 text-lg">{currentStage.description}</p>
             </div>
-            <div className="md:ml-auto text-right">
+            <div className="md:ml-auto flex flex-col items-end gap-3">
               <div className="text-4xl font-black opacity-20 select-none">
                 {currentStage.name.split(':')[0].slice(-1)}
               </div>
+              <Button 
+                onClick={() => setShowBenchmark(true)}
+                className="bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs py-1.5 px-3 flex items-center gap-2"
+              >
+                <ClipboardCheck size={14} />
+                View Benchmarks
+              </Button>
             </div>
           </div>
 
@@ -103,6 +115,16 @@ export const ProgressOverview = ({
           ))}
         </div>
       </div>
+
+      <AnimatePresence>
+        {showBenchmark && STAGE_BENCHMARKS[currentStage.id] && (
+          <BenchmarkSheet 
+            benchmark={STAGE_BENCHMARKS[currentStage.id]}
+            stageName={currentStage.name}
+            onClose={() => setShowBenchmark(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

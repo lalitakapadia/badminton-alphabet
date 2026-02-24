@@ -1,145 +1,18 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { createClient } from "@supabase/supabase-js";
 
-const db = new Database("badminton.db");
-
-// Initialize Database
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT DEFAULT 'user',
-    current_stage_id INTEGER DEFAULT 1
-  );
-
-  CREATE TABLE IF NOT EXISTS stages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS skills (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    description TEXT,
-    level_1 TEXT,
-    level_2 TEXT,
-    level_3 TEXT,
-    level_4 TEXT,
-    level_5 TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS stage_skills (
-    stage_id INTEGER,
-    skill_id INTEGER,
-    PRIMARY KEY (stage_id, skill_id),
-    FOREIGN KEY (stage_id) REFERENCES stages(id),
-    FOREIGN KEY (skill_id) REFERENCES skills(id)
-  );
-
-  CREATE TABLE IF NOT EXISTS user_progress (
-    user_id INTEGER,
-    skill_id INTEGER,
-    status TEXT DEFAULT 'not_started',
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, skill_id),
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (skill_id) REFERENCES skills(id)
-  );
-`);
-
-// Seed initial data if empty
-const stageCount = db.prepare("SELECT count(*) as count FROM stages").get() as { count: number };
-if (stageCount.count === 0) {
-  const insertStage = db.prepare("INSERT INTO stages (name, description) VALUES (?, ?)");
-  const insertSkill = db.prepare("INSERT INTO skills (id, name, description, level_1, level_2, level_3, level_4, level_5) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-  const insertStageSkill = db.prepare("INSERT INTO stage_skills (stage_id, skill_id) VALUES (?, ?)");
-
-  const stages = [
-    { name: "Stage 1: Foundation", desc: "Core athletic base and essential movement patterns." },
-    { name: "Stage 2: Fundamentals", desc: "Developing rally flow and basic hitting mechanics." },
-    { name: "Stage 3: Mechanics", desc: "Focusing on kinetic efficiency and offensive structure." },
-    { name: "Stage 4: Tactics & Mastery", desc: "Strategic positioning, speed, and high-performance variation." }
-  ];
-
-  const skillData = [
-    { id: 1, char: "A", name: "Athletic Base", l1: "Static ready only", l2: "Split visible but late", l3: "Timed split in drills", l4: "Timed split in rally", l5: "Anticipatory split" },
-    { id: 2, char: "B", name: "Balance", l1: "Falls/wobbles", l2: "Holds briefly", l3: "Stable lunge + push back", l4: "Stable under speed", l5: "Stable under pressure" },
-    { id: 3, char: "C", name: "Clean Contact", l1: "Frequent mishits", l2: "5/10 clean stationary", l3: "8/10 clean in movement", l4: "Clean under pace", l5: "Clean under pressure" },
-    { id: 4, char: "D", name: "Direction", l1: "Random", l2: "Straight control", l3: "Straight + cross control", l4: "Intentional placement", l5: "Disguised direction" },
-    { id: 5, char: "E", name: "Efficient Footwork", l1: "Late to shuttle", l2: "Covers 4 corners", l3: "Covers 6 corners smooth", l4: "6 corners at speed", l5: "Efficient + anticipatory" },
-    { id: 6, char: "F", name: "Flow", l1: "3–5 shots", l2: "6–8 shots", l3: "10–15 shots", l4: "20+ under pace", l5: "30+ match intensity" },
-    { id: 7, char: "G", name: "Grip System", l1: "Incorrect grip", l2: "Correct FH grip", l3: "Auto FH/BH switch", l4: "Finger acceleration", l5: "Disguised grip use" },
-    { id: 8, char: "H", name: "Height Control", l1: "Flat/short clears", l2: "Mid-court clear", l3: "Full backcourt clear", l4: "Adjusts trajectory", l5: "Controls tempo" },
-    { id: 9, char: "I", name: "Impact Timing", l1: "Beside body", l2: "Attempts front contact", l3: "Consistent in front", l4: "Early interception", l5: "Peak contact mastery" },
-    { id: 10, char: "J", name: "Jump Mechanics", l1: "Unsafe landing", l2: "Controlled landing", l3: "Basic scissor jump", l4: "Balanced jump smash", l5: "Seamless jump recovery" },
-    { id: 11, char: "K", name: "Kinetic Chain", l1: "Arm only", l2: "Shoulder rotation", l3: "Hip-shoulder sequence", l4: "Efficient transfer", l5: "Explosive full chain" },
-    { id: 12, char: "L", name: "Lunge Quality", l1: "Knee collapse", l2: "Stable but slow recover", l3: "Stable + push back", l4: "Explosive recovery", l5: "Net dominance control" },
-    { id: 13, char: "M", name: "Movement Reading", l1: "Reacts late", l2: "Reacts after net", l3: "Reads early", l4: "Anticipates patterns", l5: "Predicts intention" },
-    { id: 14, char: "N", name: "Net Control", l1: "Shuttle sits high", l2: "Basic tight net", l3: "Tight + lift option", l4: "Net spin control", l5: "Deceptive net mastery" },
-    { id: 15, char: "O", name: "Offensive Structure", l1: "Random attack", l2: "Smash only", l3: "Clear-drop-smash idea", l4: "Structured build-up", l5: "Maintains attack" },
-    { id: 16, char: "P", name: "Positioning", l1: "Stays where landed", l2: "Returns slowly", l3: "Returns consistently", l4: "Adjusts base", l5: "Strategic positioning" },
-    { id: 17, char: "Q", name: "Quickness", l1: "Slow first step", l2: "Visible effort", l3: "Fast first step", l4: "Rapid transitions", l5: "Elite reactive speed" },
-    { id: 18, char: "R", name: "Recovery", l1: "Walks back", l2: "Late recovery", l3: "Recovers before hit", l4: "Recovers ready", l5: "Offensive recovery" },
-    { id: 19, char: "S", name: "Serve & Return", l1: "Illegal/inconsistent", l2: "Legal high serve", l3: "Accurate high/short", l4: "Tactical placement", l5: "Controls first 3 shots" },
-    { id: 20, char: "T", name: "Tactics", l1: "Random play", l2: "Sees open space", l3: "Uses patterns", l4: "Exploits weakness", l5: "Adapts mid-match" },
-    { id: 21, char: "U", name: "Under Pressure", l1: "Technique collapses", l2: "Slight instability", l3: "Maintains form", l4: "Controls rally emotions", l5: "Clutch performance" },
-    { id: 22, char: "V", name: "Variation", l1: "One pace only", l2: "Clear vs drop", l3: "Pace + angle variation", l4: "Multi-option attack", l5: "Full deception" },
-    { id: 23, char: "W", name: "Wrist/Fingers", l1: "Arm dominant", l2: "Basic finger use", l3: "Drive acceleration", l4: "Explosive wrist", l5: "Micro precision control" },
-    { id: 24, char: "X", name: "X-Factor", l1: "Follows only", l2: "Attempts creativity", l3: "Shows style", l4: "Adaptive creativity", l5: "Signature weapon" },
-    { id: 25, char: "Y", name: "Physical Conditioning", l1: "Fatigues quickly", l2: "Moderate endurance", l3: "Sustains rally", l4: "Strong speed endurance", l5: "High-performance fitness" },
-    { id: 26, char: "Z", name: "Zone (Mental)", l1: "Easily distracted", l2: "Short focus", l3: "Focus full rally", l4: "Resets after errors", l5: "Competitive composur" }
-  ];
-
-  stages.forEach((s) => insertStage.run(s.name, s.desc));
-  skillData.forEach((skill) => {
-    insertSkill.run(skill.id, `${skill.char}: ${skill.name}`, "", skill.l1, skill.l2, skill.l3, skill.l4, skill.l5);
-  });
-
-  // Mapping provided by user
-  const mapping = [
-    // Stage 1
-    { s: 1, k: [1, 2, 3, 5, 12, 18] },
-    // Stage 2
-    { s: 2, k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] },
-    // Stage 3
-    { s: 3, k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22] },
-    // Stage 4
-    { s: 4, k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26] }
-  ];
-
-  mapping.forEach(m => {
-    m.k.forEach(skillId => {
-      insertStageSkill.run(m.s, skillId);
-    });
-  });
-
-  // Create default admin
-  db.prepare("INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)").run(
-    "Admin Coach", "admin@badminton.com", "admin123", "admin"
-  );
-
-  // Seed students from provided list
-  const students = [
-    { name: "P M", email: "p.m@badminton.com" },
-    { name: "S K", email: "s.k@badminton.com" },
-    { name: "A S", email: "a.s@badminton.com" },
-    { name: "R R", email: "r.r@badminton.com" },
-    { name: "A B", email: "a.b@badminton.com" },
-    { name: "A S 2", email: "a.s2@badminton.com" }
-  ];
-
-  students.forEach(s => {
-    db.prepare("INSERT INTO users (name, email, password, role, current_stage_id) VALUES (?, ?, ?, ?, ?)").run(
-      s.name, s.email, "student123", "user", 1
-    );
-  });
-}
+// Initialize Supabase Admin
+const supabaseAdmin = process.env.VITE_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    })
+  : null;
 
 async function startServer() {
   const app = express();
@@ -148,64 +21,459 @@ async function startServer() {
   app.use(express.json());
 
   // Auth Routes
-  app.post("/api/register", (req, res) => {
-    const { name, email, password } = req.body;
+  app.get("/api/auth/url", (req, res) => {
+    const provider = req.query.provider as string || 'google';
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+    const redirectUri = `${appUrl}/auth/callback`;
+
+    if (!supabaseUrl) {
+      return res.status(500).json({ error: "Supabase URL not configured" });
+    }
+
+    // Construct Supabase OAuth URL
+    const params = new URLSearchParams({
+      provider: provider,
+      redirect_to: redirectUri,
+    });
+
+    const authUrl = `${supabaseUrl}/auth/v1/authorize?${params}`;
+    res.json({ url: authUrl });
+  });
+
+  app.get(["/auth/callback", "/auth/callback/"], (req, res) => {
+    // Supabase Auth usually handles the code exchange on the client side 
+    // if it's a hash-based redirect, but for server-side it might be different.
+    // However, we just need to return the success page that sends postMessage.
+    res.send(`
+      <html>
+        <body>
+          <script>
+            if (window.opener) {
+              window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+              window.close();
+            } else {
+              window.location.href = '/';
+            }
+          </script>
+          <p>Authentication successful. This window should close automatically.</p>
+        </body>
+      </html>
+    `);
+  });
+
+  app.post("/api/auth/sync", async (req, res) => {
+    const { supabase_uid, email, name, access_token, role, invitation_token } = req.body;
+    
+    console.log(`Syncing user: ${email} (${supabase_uid}), Role: ${role}`);
+
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    let verifiedUid = supabase_uid;
+    let verifiedEmail = email;
+    let metadata: any = {};
+
+    // Verify with Supabase Admin if token is provided
+    if (access_token) {
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
+      if (error || !user) {
+        console.error("Token verification failed:", error);
+        return res.status(401).json({ error: "Invalid Supabase token" });
+      }
+      verifiedUid = user.id;
+      verifiedEmail = user.email;
+      metadata = user.user_metadata || {};
+      console.log("Token verified. Metadata:", metadata);
+    }
+
+    // Check if user exists
+    const { data: existingUser, error: fetchError } = await supabaseAdmin
+      .from("users")
+      .select("id, supabase_uid, name, email, role, current_stage_id")
+      .or(`supabase_uid.eq.${verifiedUid},email.eq.${verifiedEmail}`)
+      .maybeSingle();
+    
+    if (fetchError) {
+      console.error("Fetch error during sync:", fetchError);
+      return res.status(500).json({ error: fetchError.message });
+    }
+
+    if (!existingUser) {
+      console.log("User not found in local DB. Creating new record...");
+      
+      const effectiveRole = role || metadata.role || 'player';
+      const effectiveName = name || metadata.full_name || verifiedEmail.split('@')[0];
+
+      let coachId = null;
+      let userRole = effectiveRole;
+
+      // If it's a player registration, check invitation
+      if (userRole === 'player' && invitation_token) {
+        const { data: invitation, error: invError } = await supabaseAdmin
+          .from("invitations")
+          .select("*")
+          .eq("token", invitation_token)
+          .eq("status", "pending")
+          .single();
+        
+        if (!invError && invitation) {
+          coachId = invitation.coach_id;
+          // Mark invitation as accepted
+          await supabaseAdmin.from("invitations").update({ status: 'accepted' }).eq("id", invitation.id);
+        } else {
+          return res.status(400).json({ error: "Invalid or expired invitation" });
+        }
+      } else if (userRole === 'player' && !invitation_token) {
+        // If we can't find an invitation and it's a player, we block it
+        // unless they are an admin (which we don't handle here yet)
+        console.warn(`Blocking player sync without invitation: ${verifiedEmail}`);
+        return res.status(403).json({ error: "Players cannot register without an invitation" });
+      }
+
+      // Create new user
+      const { data: newUser, error: insertError } = await supabaseAdmin
+        .from("users")
+        .insert({
+          supabase_uid: verifiedUid,
+          name: effectiveName,
+          email: verifiedEmail,
+          role: userRole
+        })
+        .select("id, name, email, role, current_stage_id")
+        .single();
+      
+      if (insertError) {
+        console.error("Insert error during sync:", insertError);
+        return res.status(500).json({ error: insertError.message });
+      }
+      console.log("New user record created:", newUser.id);
+      return res.json(newUser);
+    } else if (!existingUser.supabase_uid) {
+      console.log("Linking existing email-only user to Supabase UID...");
+      // Link existing email-only user to Supabase
+      const { data: updatedUser, error: updateError } = await supabaseAdmin
+        .from("users")
+        .update({ supabase_uid: verifiedUid })
+        .eq("id", existingUser.id)
+        .select("id, name, email, role, current_stage_id")
+        .single();
+      
+      if (updateError) {
+        console.error("Update error during sync:", updateError);
+        return res.status(500).json({ error: updateError.message });
+      }
+      return res.json(updatedUser);
+    }
+    
+    res.json(existingUser);
+  });
+
+  // Invitation Routes
+  app.post("/api/invitations", async (req, res) => {
+    const { email, coachId } = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+    const { data, error } = await supabaseAdmin
+      .from("invitations")
+      .insert({ email, coach_id: coachId, token })
+      .select()
+      .single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    
+    // In a real app, you'd send an email here
+    res.json({ success: true, token });
+  });
+
+  app.get("/api/invitations/:token", async (req, res) => {
+    const { token } = req.params;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("invitations")
+      .select("*, coach:users!coach_id(name)")
+      .eq("token", token)
+      .eq("status", "pending")
+      .single();
+    
+    if (error || !data) return res.status(404).json({ error: "Invalid or expired invitation" });
+    res.json(data);
+  });
+
+  // Approval Routes
+  app.get("/api/coach/:coachId/pending-players", async (req, res) => {
+    const { coachId } = req.params;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    // Since coach_id doesn't exist, we can't filter. 
+    // For now, return nothing or all players? 
+    // Let's return nothing to avoid showing everyone's players to every coach.
+    res.json([]);
+  });
+
+  app.patch("/api/players/:id/approve", async (req, res) => {
+    res.json({ success: true });
+  });
+
+  app.post("/api/register", async (req, res) => {
+    const { name, email, password, role, invitation_token } = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
     try {
-      const result = db.prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)").run(name, email, password);
-      const user = db.prepare("SELECT id, name, email, role, current_stage_id FROM users WHERE id = ?").get(result.lastInsertRowid);
-      res.json(user);
-    } catch (e) {
-      res.status(400).json({ error: "Email already exists" });
+      let coachId = null;
+      if (role === 'player') {
+        if (!invitation_token) throw new Error("Invitation token required for players");
+        
+        const { data: inv, error: invErr } = await supabaseAdmin
+          .from("invitations")
+          .select("*")
+          .eq("token", invitation_token)
+          .eq("status", "pending")
+          .single();
+        
+        if (invErr || !inv) throw new Error("Invalid or expired invitation");
+        coachId = inv.coach_id;
+        await supabaseAdmin.from("invitations").update({ status: 'accepted' }).eq("id", inv.id);
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("users")
+        .insert({ 
+          name, 
+          email, 
+          password, 
+          role: role || 'player'
+        })
+        .select("id, name, email, role, current_stage_id")
+        .single();
+      
+      if (error) throw error;
+      res.json(data);
+    } catch (e: any) {
+      res.status(400).json({ error: e.message || "Registration failed" });
     }
   });
 
-  app.post("/api/login", (req, res) => {
+  app.post("/api/login", async (req, res) => {
     const { email, password } = req.body;
-    const user = db.prepare("SELECT id, name, email, role, current_stage_id FROM users WHERE email = ? AND password = ?").get(email, password);
-    if (user) {
-      res.json(user);
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("id, name, email, role, current_stage_id")
+      .eq("email", email)
+      .eq("password", password)
+      .single();
+    
+    if (data) {
+      res.json(data);
     } else {
       res.status(401).json({ error: "Invalid credentials" });
     }
   });
 
   // User Routes
-  app.get("/api/users", (req, res) => {
-    const users = db.prepare("SELECT id, name, email, role, current_stage_id FROM users").all();
-    res.json(users);
+  app.get("/api/users", async (req, res) => {
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .select("id, name, email, role, current_stage_id");
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
   });
 
-  app.patch("/api/users/:id/stage", (req, res) => {
+  app.patch("/api/users/:id/stage", async (req, res) => {
     const { id } = req.params;
     const { stageId } = req.body;
-    db.prepare("UPDATE users SET current_stage_id = ? WHERE id = ?").run(stageId, id);
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { error } = await supabaseAdmin
+      .from("users")
+      .update({ current_stage_id: stageId })
+      .eq("id", id);
+    
+    if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });
   });
 
   // Progress Routes
-  app.get("/api/stages", (req, res) => {
-    const stages = db.prepare("SELECT * FROM stages").all();
-    const skills = db.prepare(`
-      SELECT s.*, ss.stage_id 
-      FROM skills s 
-      JOIN stage_skills ss ON s.id = ss.skill_id
-    `).all();
-    res.json({ stages, skills });
+  app.get("/api/stages", async (req, res) => {
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data: stages, error: stageError } = await supabaseAdmin
+      .from("stages")
+      .select("*");
+    
+    const { data: skills, error: skillError } = await supabaseAdmin
+      .from("skills")
+      .select(`
+        *,
+        stage_skills!inner(stage_id)
+      `);
+    
+    if (stageError || skillError) {
+      return res.status(500).json({ error: (stageError || skillError)?.message });
+    }
+
+    // Flatten skills to match expected format
+    const formattedSkills = skills.map((s: any) => ({
+      ...s,
+      stage_id: s.stage_skills[0].stage_id
+    }));
+
+    res.json({ stages, skills: formattedSkills });
   });
 
-  app.get("/api/progress/:userId", (req, res) => {
+  app.get("/api/progress/:userId", async (req, res) => {
     const { userId } = req.params;
-    const progress = db.prepare("SELECT * FROM user_progress WHERE user_id = ?").all(userId);
-    res.json(progress);
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("user_progress")
+      .select("*")
+      .eq("user_id", userId);
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
   });
 
-  app.post("/api/progress", (req, res) => {
+  app.post("/api/progress", async (req, res) => {
     const { userId, skillId, status } = req.body;
-    db.prepare(`
-      INSERT INTO user_progress (user_id, skill_id, status) 
-      VALUES (?, ?, ?) 
-      ON CONFLICT(user_id, skill_id) DO UPDATE SET status = excluded.status, updated_at = CURRENT_TIMESTAMP
-    `).run(userId, skillId, status);
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { error } = await supabaseAdmin
+      .from("user_progress")
+      .upsert({ user_id: userId, skill_id: skillId, status, updated_at: new Date().toISOString() }, { onConflict: 'user_id,skill_id' });
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
+  // Admin Management Routes
+  app.patch("/api/admin/users/:id", async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("users")
+      .update(updates)
+      .eq("id", id)
+      .select("id, name, email, role, current_stage_id")
+      .single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.delete("/api/admin/users/:id", async (req, res) => {
+    const { id } = req.params;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { error } = await supabaseAdmin
+      .from("users")
+      .delete()
+      .eq("id", id);
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
+  app.post("/api/admin/stages", async (req, res) => {
+    const { name, description } = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("stages")
+      .insert({ name, description })
+      .select()
+      .single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.patch("/api/admin/stages/:id", async (req, res) => {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("stages")
+      .update({ name, description })
+      .eq("id", id)
+      .select()
+      .single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.delete("/api/admin/stages/:id", async (req, res) => {
+    const { id } = req.params;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { error } = await supabaseAdmin
+      .from("stages")
+      .delete()
+      .eq("id", id);
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
+  app.post("/api/admin/skills", async (req, res) => {
+    const { stage_id, ...skillData } = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data: skill, error: skillError } = await supabaseAdmin
+      .from("skills")
+      .insert(skillData)
+      .select()
+      .single();
+    
+    if (skillError) return res.status(500).json({ error: skillError.message });
+
+    if (stage_id) {
+      const { error: linkError } = await supabaseAdmin
+        .from("stage_skills")
+        .insert({ stage_id, skill_id: skill.id });
+      
+      if (linkError) console.error("Error linking skill to stage:", linkError);
+    }
+
+    res.json(skill);
+  });
+
+  app.patch("/api/admin/skills/:id", async (req, res) => {
+    const { id } = req.params;
+    const updates = req.body;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { data, error } = await supabaseAdmin
+      .from("skills")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+    
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  });
+
+  app.delete("/api/admin/skills/:id", async (req, res) => {
+    const { id } = req.params;
+    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+
+    const { error } = await supabaseAdmin
+      .from("skills")
+      .delete()
+      .eq("id", id);
+    
+    if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });
   });
 

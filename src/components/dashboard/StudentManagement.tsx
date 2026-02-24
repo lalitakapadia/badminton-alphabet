@@ -1,6 +1,8 @@
-import React from 'react';
-import { Users, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, ChevronRight, UserPlus, Check, X, Mail } from 'lucide-react';
 import { User, Stage } from '../../types';
+import { Button } from '../Button';
+import { Input } from '../Input';
 
 interface StudentManagementProps {
   filteredUsers: User[];
@@ -13,6 +15,8 @@ interface StudentManagementProps {
   filterStage: number | 'all';
   setFilterStage: (stage: number | 'all') => void;
   stages: Stage[];
+  onInvite?: (email: string) => void;
+  isCoach?: boolean;
 }
 
 export const StudentManagement = ({
@@ -25,10 +29,45 @@ export const StudentManagement = ({
   setSortBy,
   filterStage,
   setFilterStage,
-  stages
+  stages,
+  onInvite,
+  isCoach
 }: StudentManagementProps) => {
+  const [inviteEmail, setInviteEmail] = useState('');
+
+  const handleInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inviteEmail && onInvite) {
+      onInvite(inviteEmail);
+      setInviteEmail('');
+    }
+  };
+
   return (
     <div className="lg:col-span-4 space-y-6">
+      {isCoach && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <UserPlus size={20} className="text-emerald-600" />
+            <h2 className="text-lg font-bold text-slate-900">Invite Player</h2>
+          </div>
+          <form onSubmit={handleInvite} className="flex gap-2">
+            <div className="flex-1">
+              <Input 
+                placeholder="Parent's email" 
+                value={inviteEmail}
+                onChange={(e: any) => setInviteEmail(e.target.value)}
+                type="email"
+                required
+                className="py-2"
+              />
+            </div>
+            <Button type="submit" className="px-4">Invite</Button>
+          </form>
+          <p className="text-[10px] text-slate-400">An invitation link will be generated for you to share with the parent.</p>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Users size={20} className="text-emerald-600" />

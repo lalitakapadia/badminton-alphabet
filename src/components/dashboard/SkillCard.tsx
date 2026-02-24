@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Circle, Clock, Award } from 'lucide-react';
+import { CheckCircle2, Circle, Clock, Award, ShieldAlert } from 'lucide-react';
 import { Skill, Progress } from '../../types';
 import { Card } from '../Card';
 
@@ -9,9 +9,10 @@ interface SkillCardProps {
   isAdmin: boolean;
   selectedUserId?: number;
   onUpdateProgress?: (userId: number, skillId: number, status: string) => void;
+  key?: number | string;
 }
 
-export const SkillCard = ({ skill, progress, isAdmin, selectedUserId, onUpdateProgress }: any) => {
+export const SkillCard = ({ skill, progress, isAdmin, selectedUserId, onUpdateProgress }: SkillCardProps) => {
   const status = progress?.status || 'not_started';
   
   const levels = [
@@ -69,6 +70,30 @@ export const SkillCard = ({ skill, progress, isAdmin, selectedUserId, onUpdatePr
             </div>
           ))}
         </div>
+
+        {/* Safety Instructions */}
+        {(skill.safety_risks || skill.safety_prevention || skill.safety_monitor || skill.safety_stop) && (
+          <div className="mt-4 p-4 bg-rose-50 rounded-xl border border-rose-100 space-y-3">
+            <div className="flex items-center gap-2 pb-2 border-b border-rose-200">
+              <ShieldAlert size={14} className="text-rose-600" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-rose-700">Safety Precautions</span>
+            </div>
+            <div className="space-y-2 text-[11px]">
+              {skill.safety_risks && (
+                <p className="text-rose-900"><strong className="uppercase opacity-70">Risks:</strong> {skill.safety_risks}</p>
+              )}
+              {skill.safety_prevention && (
+                <p className="text-rose-900"><strong className="uppercase opacity-70">Prevention:</strong> {skill.safety_prevention}</p>
+              )}
+              {skill.safety_monitor && (
+                <p className="text-rose-900"><strong className="uppercase opacity-70">Monitor:</strong> {skill.safety_monitor}</p>
+              )}
+              {skill.safety_stop && (
+                <p className="text-rose-900 font-bold"><strong className="uppercase opacity-70">Stop if:</strong> {skill.safety_stop}</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {isAdmin && selectedUserId && onUpdateProgress && (
