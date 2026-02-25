@@ -39,6 +39,8 @@ export default function App() {
   const [sortBy, setSortBy] = useState<'name_asc' | 'name_desc'>('name_asc');
   const [filterStage, setFilterStage] = useState<number | 'all'>('all');
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   useEffect(() => {
     // Handle OAuth popup callback if we are in a popup and have a session hash
     if (window.opener && (window.location.hash.includes('access_token') || window.location.search.includes('code='))) {
@@ -77,7 +79,8 @@ export default function App() {
 
     // Supabase Auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      console.log('Auth state changed:', event, session?.user?.email);
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
         await syncUserWithBackend(session.user, session.access_token);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -86,7 +89,8 @@ export default function App() {
       }
     });
 
-    // Initial session check
+    // Initial session check is handled by onAuthStateChange with INITIAL_SESSION in newer Supabase versions,
+    // but we'll keep a manual check just in case, guarded by isSyncing.
     checkSupabaseSession();
 
     return () => {
@@ -96,6 +100,7 @@ export default function App() {
   }, []);
 
   const checkSupabaseSession = async () => {
+    if (isSyncing) return;
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       await syncUserWithBackend(session.user, session.access_token);
@@ -115,7 +120,10 @@ export default function App() {
   };
 
   const syncUserWithBackend = async (supabaseUser: any, accessToken?: string, extraData: any = {}) => {
+    if (isSyncing) return;
+    setIsSyncing(true);
     try {
+      console.log('Syncing user with backend...', supabaseUser.email);
       const res = await fetch('/api/auth/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +156,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error syncing user:', err);
+    } finally {
+      setIsSyncing(false);
     }
   };
 

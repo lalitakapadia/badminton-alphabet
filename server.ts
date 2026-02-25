@@ -75,6 +75,7 @@ async function startServer() {
 
     // Verify with Supabase Admin if token is provided
     if (access_token) {
+      console.log("Verifying access token with Supabase Admin...");
       const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
       if (error || !user) {
         console.error("Token verification failed:", error);
@@ -83,10 +84,11 @@ async function startServer() {
       verifiedUid = user.id;
       verifiedEmail = user.email;
       metadata = user.user_metadata || {};
-      console.log("Token verified. Metadata:", metadata);
+      console.log(`Token verified for ${verifiedEmail}. Metadata:`, JSON.stringify(metadata));
     }
 
     // Check if user exists
+    console.log(`Checking if user exists in local DB: ${verifiedEmail} / ${verifiedUid}`);
     const { data: existingUser, error: fetchError } = await supabaseAdmin
       .from("users")
       .select("id, supabase_uid, name, email, role, current_stage_id")
@@ -102,7 +104,9 @@ async function startServer() {
       console.log("User not found in local DB. Creating new record...");
       
       const effectiveRole = role || metadata.role || 'player';
-      const effectiveName = name || metadata.full_name || verifiedEmail.split('@')[0];
+      const effectiveName = name || metadata.full_name || verifiedEmail?.split('@')[0] || 'Unknown';
+
+      console.log(`Effective Role: ${effectiveRole}, Effective Name: ${effectiveName}`);
 
       let coachId = null;
       let userRole = effectiveRole;
