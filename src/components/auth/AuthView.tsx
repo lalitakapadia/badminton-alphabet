@@ -15,6 +15,7 @@ interface AuthViewProps {
   error: string;
   invitationToken?: string;
   invitationData?: any;
+  syncing?: boolean;
 }
 
 export const AuthView = ({ 
@@ -26,7 +27,8 @@ export const AuthView = ({
   loading, 
   error,
   invitationToken,
-  invitationData
+  invitationData,
+  syncing
 }: AuthViewProps) => {
   const [email, setEmail] = useState('');
   const [regType, setRegType] = useState<'coach' | 'player'>(invitationToken ? 'player' : 'coach');
@@ -87,6 +89,13 @@ export const AuthView = ({
                 <p className="text-sm font-bold text-amber-900">Invitation Required</p>
                 <p className="text-xs text-amber-700">Players can only join via an invitation from their coach. Please check your email for an invite link.</p>
               </div>
+            </div>
+          )}
+
+          {syncing && (
+            <div className="mb-6 p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center justify-center gap-3 animate-pulse">
+              <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-sm font-bold text-emerald-900">Syncing your account...</p>
             </div>
           )}
 

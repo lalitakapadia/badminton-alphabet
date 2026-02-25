@@ -137,9 +137,11 @@ export default function App() {
       });
       if (res.ok) {
         const userData = await res.json();
+        console.log('Sync successful:', userData);
         setUser(userData);
         localStorage.setItem('badminton_user', JSON.stringify(userData));
         setView('dashboard');
+        setError(''); // Clear any previous errors
         
         // Clean up URL if we are on callback path
         if (window.location.pathname === '/auth/callback') {
@@ -152,10 +154,19 @@ export default function App() {
         }
       } else {
         const errData = await res.json();
+        console.error('Sync failed with status:', res.status, errData);
         setError(errData.error || 'Sync failed');
+        // If sync fails, make sure they can see the error
+        if (view !== 'login' && view !== 'register') {
+          setView('login');
+        }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error syncing user:', err);
+      setError(err.message || 'An unexpected error occurred during sync');
+      if (view !== 'login' && view !== 'register') {
+        setView('login');
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -378,6 +389,7 @@ export default function App() {
         onMagicLink={handleMagicLink}
         loading={loading} 
         error={error} 
+        syncing={isSyncing}
         invitationToken={invitationToken}
         invitationData={invitationData}
       />

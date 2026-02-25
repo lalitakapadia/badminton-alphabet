@@ -65,9 +65,15 @@ async function startServer() {
   app.post("/api/auth/sync", async (req, res) => {
     const { supabase_uid, email, name, access_token, role, invitation_token } = req.body;
     
-    console.log(`Syncing user: ${email} (${supabase_uid}), Role: ${role}`);
+    console.log(`[Sync] Request received for: ${email || 'no-email'} (${supabase_uid || 'no-uid'})`);
 
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase not configured" });
+    if (!process.env.VITE_SUPABASE_URL) console.error("[Sync] Missing VITE_SUPABASE_URL");
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) console.error("[Sync] Missing SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseAdmin) {
+      console.error("[Sync] Supabase Admin client not initialized");
+      return res.status(500).json({ error: "Server configuration error: Supabase not configured" });
+    }
 
     let verifiedUid = supabase_uid;
     let verifiedEmail = email;
@@ -75,20 +81,25 @@ async function startServer() {
 
     // Verify with Supabase Admin if token is provided
     if (access_token) {
-      console.log("Verifying access token with Supabase Admin...");
+      console.log("[Sync] Verifying access token...");
       const { data: { user }, error } = await supabaseAdmin.auth.getUser(access_token);
       if (error || !user) {
-        console.error("Token verification failed:", error);
-        return res.status(401).json({ error: "Invalid Supabase token" });
+        console.error("[Sync] Token verification failed:", error);
+        return res.status(401).json({ error: "Authentication failed: Invalid session" });
       }
       verifiedUid = user.id;
       verifiedEmail = user.email;
       metadata = user.user_metadata || {};
-      console.log(`Token verified for ${verifiedEmail}. Metadata:`, JSON.stringify(metadata));
+      console.log(`[Sync] Token verified for ${verifiedEmail}. Metadata keys: ${Object.keys(metadata).join(', ')}`);
+    }
+
+    if (!verifiedEmail) {
+      console.error("[Sync] No email found for user");
+      return res.status(400).json({ error: "Synchronization failed: No email address found" });
     }
 
     // Check if user exists
-    console.log(`Checking if user exists in local DB: ${verifiedEmail} / ${verifiedUid}`);
+    console.log(`[Sync] Checking local DB for: ${verifiedEmail} / ${verifiedUid}`);
     const { data: existingUser, error: fetchError } = await supabaseAdmin
       .from("users")
       .select("id, supabase_uid, name, email, role, current_stage_id")
@@ -96,45 +107,41 @@ async function startServer() {
       .maybeSingle();
     
     if (fetchError) {
-      console.error("Fetch error during sync:", fetchError);
-      return res.status(500).json({ error: fetchError.message });
+      console.error("[Sync] DB Fetch error:", fetchError);
+      return res.status(500).json({ error: `Database error: ${fetchError.message}` });
     }
 
     if (!existingUser) {
-      console.log("User not found in local DB. Creating new record...");
+      console.log("[Sync] User not found in local DB. Preparing to create...");
       
-      const effectiveRole = role || metadata.role || 'player';
-      const effectiveName = name || metadata.full_name || verifiedEmail?.split('@')[0] || 'Unknown';
+      const effectiveRole = role || metadata.role || metadata.user_role || 'player';
+      const effectiveName = name || metadata.full_name || metadata.name || verifiedEmail.split('@')[0] || 'User';
 
-      console.log(`Effective Role: ${effectiveRole}, Effective Name: ${effectiveName}`);
+      console.log(`[Sync] Decision - Role: ${effectiveRole}, Name: ${effectiveName}`);
 
-      let coachId = null;
       let userRole = effectiveRole;
 
       // If it's a player registration, check invitation
-      if (userRole === 'player' && invitation_token) {
+      if (userRole === 'player') {
+        console.log(`[Sync] Player role detected. Checking invitations for ${verifiedEmail}...`);
         const { data: invitation, error: invError } = await supabaseAdmin
           .from("invitations")
           .select("*")
-          .eq("token", invitation_token)
+          .eq("email", verifiedEmail)
           .eq("status", "pending")
-          .single();
+          .maybeSingle();
         
         if (!invError && invitation) {
-          coachId = invitation.coach_id;
-          // Mark invitation as accepted
+          console.log(`[Sync] Found invitation. Coach ID: ${invitation.coach_id}`);
           await supabaseAdmin.from("invitations").update({ status: 'accepted' }).eq("id", invitation.id);
-        } else {
-          return res.status(400).json({ error: "Invalid or expired invitation" });
+        } else if (!invitation_token) {
+          console.warn(`[Sync] Blocking player registration - no invitation found for ${verifiedEmail}`);
+          return res.status(403).json({ error: "Access Denied: Players must be invited by a coach to join." });
         }
-      } else if (userRole === 'player' && !invitation_token) {
-        // If we can't find an invitation and it's a player, we block it
-        // unless they are an admin (which we don't handle here yet)
-        console.warn(`Blocking player sync without invitation: ${verifiedEmail}`);
-        return res.status(403).json({ error: "Players cannot register without an invitation" });
       }
 
       // Create new user
+      console.log(`[Sync] Inserting user into DB...`);
       const { data: newUser, error: insertError } = await supabaseAdmin
         .from("users")
         .insert({
@@ -147,10 +154,10 @@ async function startServer() {
         .single();
       
       if (insertError) {
-        console.error("Insert error during sync:", insertError);
-        return res.status(500).json({ error: insertError.message });
+        console.error("[Sync] DB Insert error:", insertError);
+        return res.status(500).json({ error: `Failed to create user record: ${insertError.message}` });
       }
-      console.log("New user record created:", newUser.id);
+      console.log(`[Sync] Successfully created user ${newUser.id}`);
       return res.json(newUser);
     } else if (!existingUser.supabase_uid) {
       console.log("Linking existing email-only user to Supabase UID...");
