@@ -95,8 +95,15 @@ export const AdminPanel = ({ stages, skills, onRefresh }: AdminPanelProps) => {
     setLoading(true);
     try {
       const res = await fetch('/api/users');
-      const data = await res.json();
-      setAllUsers(data);
+      if (res.ok) {
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          const data = await res.json();
+          setAllUsers(data);
+        } else {
+          console.error('Non-JSON users response');
+        }
+      }
     } catch (err) {
       console.error('Error fetching users:', err);
     } finally {

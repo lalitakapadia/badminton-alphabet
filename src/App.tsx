@@ -111,8 +111,13 @@ export default function App() {
     try {
       const res = await fetch(`/api/invitations/${token}`);
       if (res.ok) {
-        const data = await res.json();
-        setInvitationData(data);
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          const data = await res.json();
+          setInvitationData(data);
+        } else {
+          console.error('Non-JSON invitation response');
+        }
       }
     } catch (err) {
       console.error('Error fetching invitation:', err);
@@ -135,11 +140,21 @@ export default function App() {
           ...extraData
         })
       });
+
+      let data;
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        console.error('Non-JSON response received:', text);
+        throw new Error(text || `Server returned ${res.status} ${res.statusText}`);
+      }
+
       if (res.ok) {
-        const userData = await res.json();
-        console.log('Sync successful:', userData);
-        setUser(userData);
-        localStorage.setItem('badminton_user', JSON.stringify(userData));
+        console.log('Sync successful:', data);
+        setUser(data);
+        localStorage.setItem('badminton_user', JSON.stringify(data));
         setView('dashboard');
         setError(''); // Clear any previous errors
         
@@ -153,9 +168,8 @@ export default function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
       } else {
-        const errData = await res.json();
-        console.error('Sync failed with status:', res.status, errData);
-        setError(errData.error || 'Sync failed');
+        console.error('Sync failed with status:', res.status, data);
+        setError(data.error || 'Sync failed');
         // If sync fails, make sure they can see the error
         if (view !== 'login' && view !== 'register') {
           setView('login');
@@ -185,11 +199,15 @@ export default function App() {
         (user?.role === 'admin' || user?.role === 'coach') ? fetch('/api/users') : Promise.resolve(null)
       ]);
 
+      if (!stagesRes.ok) {
+        throw new Error(`Failed to fetch stages: ${stagesRes.statusText}`);
+      }
+
       const stagesData = await stagesRes.json();
       setStages(stagesData.stages);
       setSkills(stagesData.skills);
 
-      if (usersRes) {
+      if (usersRes && usersRes.ok) {
         const usersData = await usersRes.json();
         setAllUsers(usersData);
       }
@@ -201,8 +219,13 @@ export default function App() {
       
       if (targetUserId) {
         const progressRes = await fetch(`/api/progress/${targetUserId}`);
-        const progressData = await progressRes.json();
-        setUserProgress(progressData);
+        if (progressRes.ok) {
+          const contentType = progressRes.headers.get("content-type");
+          if (contentType && contentType.indexOf("application/json") !== -1) {
+            const progressData = await progressRes.json();
+            setUserProgress(progressData);
+          }
+        }
       } else if (user?.role === 'admin' && !selectedUser) {
         setUserProgress([]);
       }
@@ -282,9 +305,15 @@ export default function App() {
     try {
       const res = await fetch(`/api/auth/url?provider=${provider}`);
       if (!res.ok) throw new Error('Failed to get auth URL');
-      const { url } = await res.json();
-
-      window.open(url, 'oauth_popup', 'width=600,height=700');
+      
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const { url } = await res.json();
+        window.open(url, 'oauth_popup', 'width=600,height=700');
+      } else {
+        const text = await res.text();
+        throw new Error(`Invalid response from auth server: ${text.substring(0, 100)}`);
+      }
     } catch (err: any) {
       setError(err.message);
     }
@@ -359,8 +388,13 @@ export default function App() {
         body: JSON.stringify({ email, coachId: user.id })
       });
       if (res.ok) {
-        const data = await res.json();
-        alert(`Invitation link generated: ${window.location.origin}/?token=${data.token}`);
+        const contentType = res.headers.get("content-type");
+        if (contentType && contentType.indexOf("application/json") !== -1) {
+          const data = await res.json();
+          alert(`Invitation link generated: ${window.location.origin}/?token=${data.token}`);
+        } else {
+          alert('Invitation sent (non-JSON response)');
+        }
       }
     } catch (err) {
       console.error('Error inviting player:', err);
